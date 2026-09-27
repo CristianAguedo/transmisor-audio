@@ -1,0 +1,35 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller / Build outputs
+build/
+dist/
+*.spec
+
+# Binaries (FFmpeg is ~105 MB and should not be tracked in Git)
+ffmpeg.exe
+*.exe
+
+# Logs and runtime databases
+*.log
+stream.log
+ffmpeg.log
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
