@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw
 
 from core import devices
 from core.applog import log_file, setup
+from core.config import load_config, save_config
 from core.encoder import AudioEncoder
 from core.ffmpeg_bin import assets_dir, find_ffmpeg
 from core.server import StreamServer
@@ -199,9 +200,32 @@ class App(ctk.CTk):
         super().__init__()
         self.log = setup()
         self.title("Transmisor de Audio LAN")
-        self.geometry("980x640")
+        self.config = load_config()
+
         self.minsize(940, 600)
         self.configure(fg_color=BG_DARK)
+
+        saved_geom = str(self.config.get("window_geometry", "")).strip()
+        saved_state = str(self.config.get("window_state", "normal")).strip()
+
+        applied_geom = False
+        if saved_geom:
+            try:
+                self.geometry(saved_geom)
+                applied_geom = True
+            except Exception as exc:
+                self.log.warning("No se pudo aplicar window_geometry '%s': %s", saved_geom, exc)
+
+        if not applied_geom:
+            saved_w = max(940, int(self.config.get("window_width", 980)))
+            saved_h = max(600, int(self.config.get("window_height", 640)))
+            self.geometry(f"{saved_w}x{saved_h}")
+
+        if saved_state == "zoomed":
+            self.after(60, self._restore_zoomed_state)
+
+        self._resize_timer = None
+        self.bind("<Configure>", self._on_window_configure)
 
         self.server = None
         self.encoder = None
@@ -214,6 +238,7 @@ class App(ctk.CTk):
         self._ffmpeg_drawer_visible = False
 
         self.icons = create_app_icons()
+        self._initial_autostart_done = False
 
         self._build_ui()
         self._load_ffmpeg()
@@ -268,7 +293,7 @@ class App(ctk.CTk):
 
         ctk.CTkLabel(
             title_box,
-            text="Transmití cualquier entrada de audio de tu PC a celulares, tablets y Smart TVs en tu red local",
+            text="Transmití cualquier audio de tu PC (WASAPI) a celulares y Smart TVs",
             font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color=TEXT_SECONDARY,
         ).pack(anchor="w", pady=(4, 0))
@@ -387,6 +412,7 @@ class App(ctk.CTk):
             text_color=TEXT_PRIMARY,
             font=ctk.CTkFont(family="Segoe UI", size=12),
             values=["Buscando dispositivos..."],
+            command=lambda _: self._save_current_config(),
         )
         self.device_combo.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 8))
 
@@ -457,7 +483,8 @@ class App(ctk.CTk):
             justify="left",
             font=ctk.CTkFont(size=12),
         )
-        self.field_port.insert(0, "9000")
+        saved_port = str(self.config.get("port", 9000))
+        self.field_port.insert(0, saved_port)
         self.field_port.pack(fill="x", pady=(2, 0))
 
         f_bitrate = ctk.CTkFrame(card_left, fg_color="transparent")
@@ -476,8 +503,10 @@ class App(ctk.CTk):
             dropdown_fg_color=CARD_BG,
             text_color=TEXT_PRIMARY,
             font=ctk.CTkFont(family="Segoe UI", size=12),
+            command=lambda _: self._save_current_config(),
         )
-        self.field_bitrate.set("128k")
+        saved_br = str(self.config.get("bitrate", "128k"))
+        self.field_bitrate.set(saved_br if saved_br in BITRATES else "128k")
         self.field_bitrate.pack(fill="x", pady=(2, 0))
 
         # Row 6: Sample Rate & Canales
@@ -497,8 +526,10 @@ class App(ctk.CTk):
             dropdown_fg_color=CARD_BG,
             text_color=TEXT_PRIMARY,
             font=ctk.CTkFont(family="Segoe UI", size=12),
+            command=lambda _: self._save_current_config(),
         )
-        self.field_rate.set("44100")
+        saved_rate = str(self.config.get("samplerate", 44100))
+        self.field_rate.set(saved_rate if saved_rate in [str(v) for v in SAMPLERATES] else "44100")
         self.field_rate.pack(fill="x", pady=(2, 0))
 
         f_channels = ctk.CTkFrame(card_left, fg_color="transparent")
@@ -517,13 +548,15 @@ class App(ctk.CTk):
             dropdown_fg_color=CARD_BG,
             text_color=TEXT_PRIMARY,
             font=ctk.CTkFont(family="Segoe UI", size=12),
+            command=lambda _: self._save_current_config(),
         )
-        self.field_channels.set(CHANNELS["original"])
+        saved_ch_key = self.config.get("channels", "original")
+        self.field_channels.set(CHANNELS.get(saved_ch_key, CHANNELS["original"]))
         self.field_channels.pack(fill="x", pady=(2, 0))
 
-        # Row 7: Buffer & Low Latency Checkbox (clean text without misaligned emoji)
+        # Row 7: Buffer & Low Latency Checkbox
         f_buffer = ctk.CTkFrame(card_left, fg_color="transparent")
-        f_buffer.grid(row=7, column=0, sticky="ew", padx=(20, 8), pady=(0, 10))
+        f_buffer.grid(row=7, column=0, sticky="ew", padx=(20, 8), pady=(0, 8))
         ctk.CTkLabel(f_buffer, text="Buffer de captura (MB)", text_color=TEXT_SECONDARY,
                      font=ctk.CTkFont(family="Segoe UI", size=11)).pack(anchor="w")
         self.field_buffer = ctk.CTkComboBox(
@@ -538,12 +571,14 @@ class App(ctk.CTk):
             dropdown_fg_color=CARD_BG,
             text_color=TEXT_PRIMARY,
             font=ctk.CTkFont(family="Segoe UI", size=12),
+            command=lambda _: self._save_current_config(),
         )
-        self.field_buffer.set("4")
+        saved_buf = str(self.config.get("buffer", 4))
+        self.field_buffer.set(saved_buf if saved_buf in [str(v) for v in BUFFERS] else "4")
         self.field_buffer.pack(fill="x", pady=(2, 0))
 
         f_nobuf = ctk.CTkFrame(card_left, fg_color="transparent")
-        f_nobuf.grid(row=7, column=1, sticky="ew", padx=(8, 20), pady=(0, 10))
+        f_nobuf.grid(row=7, column=1, sticky="ew", padx=(8, 20), pady=(0, 8))
         ctk.CTkLabel(f_nobuf, text="Modo de latencia", text_color=TEXT_SECONDARY,
                      font=ctk.CTkFont(family="Segoe UI", size=11)).pack(anchor="w")
         self.chk_nobuffer = ctk.CTkCheckBox(
@@ -553,9 +588,31 @@ class App(ctk.CTk):
             text_color=TEXT_PRIMARY,
             fg_color=PRIMARY_BLUE,
             hover_color=PRIMARY_HOVER,
+            command=self._save_current_config,
         )
-        self.chk_nobuffer.select()
+        if self.config.get("nobuffer", True):
+            self.chk_nobuffer.select()
+        else:
+            self.chk_nobuffer.deselect()
         self.chk_nobuffer.pack(anchor="w", pady=(8, 0))
+
+        # Row 8: Autoinicio Checkbox
+        f_auto = ctk.CTkFrame(card_left, fg_color="transparent")
+        f_auto.grid(row=8, column=0, columnspan=2, sticky="ew", padx=20, pady=(2, 10))
+        self.chk_autostart = ctk.CTkCheckBox(
+            f_auto,
+            text="Autoiniciar transmisión al abrir la aplicación",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=TEXT_PRIMARY,
+            fg_color=PRIMARY_BLUE,
+            hover_color=PRIMARY_HOVER,
+            command=self._save_current_config,
+        )
+        if self.config.get("autostart", True):
+            self.chk_autostart.select()
+        else:
+            self.chk_autostart.deselect()
+        self.chk_autostart.pack(anchor="w")
 
         # Big Hero CTA Button at Bottom of Left Column
         self.btn_toggle = ctk.CTkButton(
@@ -916,15 +973,27 @@ class App(ctk.CTk):
         if not found:
             self.device_combo.configure(values=["Sin dispositivos"])
             self.device_combo.set("Sin dispositivos")
-            self.lbl_device_hint.configure(text="● Sin entradas de audio detectadas", text_color=TEXT_AMBER)
+            self.lbl_device_hint.configure(text="● Sin dispositivos detectados", text_color=TEXT_AMBER)
             return
         current = self.device_combo.get()
         self.device_combo.configure(values=found)
-        self.device_combo.set(current if current in found else found[0])
-        self.lbl_device_hint.configure(text=f"● {len(found)} entrada(s) disponible(s)", text_color=LIVE_GREEN)
-        self.log.info("Entradas: %s", " | ".join(found))
+        saved_device = str(self.config.get("device", "")).strip()
+        if saved_device and saved_device in found:
+            self.device_combo.set(saved_device)
+        elif current in found:
+            self.device_combo.set(current)
+        else:
+            self.device_combo.set(found[0])
+        self.lbl_device_hint.configure(text=f"● {len(found)} dispositivo(s)", text_color=LIVE_GREEN)
+        self.log.info("Dispositivos: %s", " | ".join(found))
         if not silent:
             self._test_device()
+
+        if not self._initial_autostart_done:
+            self._initial_autostart_done = True
+            if self.chk_autostart.get() and self.entry_ffmpeg.get().strip():
+                self.log.info("Autoinicio activado: iniciando transmisión en 600ms...")
+                self.after(600, self._start)
 
     def _test_device(self) -> None:
         ffmpeg = self.entry_ffmpeg.get().strip()
@@ -984,6 +1053,10 @@ class App(ctk.CTk):
         bitrate = self.field_bitrate.get()
 
         server = StreamServer("0.0.0.0", port, assets_dir(), status_provider=self._status_payload)
+        dev_info = devices.get_wasapi_device_info(device)
+        if dev_info:
+            server.pcm_rate = int(dev_info.get("defaultSampleRate", 48000))
+            server.pcm_channels = int(dev_info.get("maxInputChannels", 2))
         try:
             server.start()
         except OSError as exc:
@@ -999,6 +1072,7 @@ class App(ctk.CTk):
             rtbufsize_mb=int(self.field_buffer.get()),
             nobuffer=bool(self.chk_nobuffer.get()),
             on_audio=server.broadcast,
+            on_pcm=server.broadcast_pcm,
             on_error=lambda message: self._post(lambda: self._fail(message)),
             on_finished=lambda code: self._post(lambda: self._encoder_stopped(code)),
         )
@@ -1035,6 +1109,7 @@ class App(ctk.CTk):
         self.firewall_frame.grid_forget()
         self._toast("Transmisión iniciada correctamente")
         self._update_qr(self._url(port))
+        self._save_current_config()
         threading.Thread(target=self._check_firewall, args=(port,), daemon=True).start()
 
     def _check_firewall(self, port: int) -> None:
@@ -1070,11 +1145,13 @@ class App(ctk.CTk):
 
     def _stop(self) -> None:
         if self.encoder:
-            self.encoder.stop()
+            enc = self.encoder
             self.encoder = None
+            enc.stop()
         if self.server:
-            self.server.stop()
+            srv = self.server
             self.server = None
+            srv.stop()
         self.running = False
         self.started_at = 0.0
         self._set_controls(False)
@@ -1121,10 +1198,109 @@ class App(ctk.CTk):
         for button in (self.btn_refresh, self.btn_test, self.btn_browse):
             button.configure(state="disabled" if locked else "normal")
         self.chk_nobuffer.configure(state="disabled" if locked else "normal")
+        self.chk_autostart.configure(state="disabled" if locked else "normal")
+
+    def _restore_zoomed_state(self) -> None:
+        try:
+            self.state("zoomed")
+        except Exception:
+            pass
+
+    def _on_window_configure(self, event) -> None:
+        if event.widget != self:
+            return
+        try:
+            st = self.state()
+        except Exception:
+            st = "normal"
+
+        if st == "zoomed":
+            self.config["window_state"] = "zoomed"
+            try:
+                cur_x, cur_y = self.winfo_x(), self.winfo_y()
+                prev_geom = str(self.config.get("window_geometry", ""))
+                if "x" in prev_geom and "+" in prev_geom:
+                    dim = prev_geom.split("+")[0]
+                    self.config["window_geometry"] = f"{dim}+{cur_x}+{cur_y}"
+                else:
+                    w = int(self.config.get("window_width", 980))
+                    h = int(self.config.get("window_height", 640))
+                    self.config["window_geometry"] = f"{w}x{h}+{cur_x}+{cur_y}"
+            except Exception:
+                pass
+            if self._resize_timer:
+                self.after_cancel(self._resize_timer)
+            self._resize_timer = self.after(800, self._save_current_config)
+            return
+
+        if st == "normal":
+            self.config["window_state"] = "normal"
+            try:
+                geom = self.geometry()
+                if geom:
+                    self.config["window_geometry"] = geom
+                w, h = self.winfo_width(), self.winfo_height()
+                if w >= 940 and h >= 600:
+                    self.config["window_width"] = w
+                    self.config["window_height"] = h
+            except Exception:
+                pass
+            if self._resize_timer:
+                self.after_cancel(self._resize_timer)
+            self._resize_timer = self.after(800, self._save_current_config)
+
+    def _save_current_config(self) -> None:
+        try:
+            channel_label = self.field_channels.get()
+            channel_key = next((k for k, v in CHANNELS.items() if v == channel_label), "original")
+            dev = self.device_combo.get().strip()
+            if dev in EMPTY:
+                dev = ""
+            port_val = self.field_port.get().strip()
+            port = int(port_val) if port_val.isdigit() else 9000
+            rate_val = self.field_rate.get().strip()
+            samplerate = int(rate_val) if rate_val.isdigit() else 44100
+            buf_val = self.field_buffer.get().strip()
+            buffer_mb = int(buf_val) if buf_val.isdigit() else 4
+
+            try:
+                st = self.state()
+                if st in ("zoomed", "normal"):
+                    self.config["window_state"] = st
+                if st == "normal":
+                    geom = self.geometry()
+                    if geom:
+                        self.config["window_geometry"] = geom
+                    cur_w, cur_h = self.winfo_width(), self.winfo_height()
+                    if cur_w >= 940 and cur_h >= 600:
+                        self.config["window_width"] = cur_w
+                        self.config["window_height"] = cur_h
+            except Exception:
+                pass
+
+            cfg = {
+                "device": dev,
+                "port": port,
+                "bitrate": self.field_bitrate.get(),
+                "samplerate": samplerate,
+                "channels": channel_key,
+                "buffer": buffer_mb,
+                "nobuffer": bool(self.chk_nobuffer.get()),
+                "autostart": bool(self.chk_autostart.get()),
+                "window_width": int(self.config.get("window_width", 980)),
+                "window_height": int(self.config.get("window_height", 640)),
+                "window_geometry": str(self.config.get("window_geometry", "")),
+                "window_state": str(self.config.get("window_state", "normal")),
+            }
+            self.config.update(cfg)
+            save_config(self.config)
+        except Exception as exc:
+            self.log.warning("No se pudo guardar la configuración actual: %s", exc)
 
     def _status_payload(self) -> dict:
         with self._state_lock:
             payload = dict(self._state)
+        payload["transmitting"] = self.running and (self.encoder is not None and self.encoder.running)
         payload["kbps"] = round(self.encoder.kbps, 1) if (self.encoder and self.encoder.running) else 0.0
         return payload
 
@@ -1194,6 +1370,31 @@ class App(ctk.CTk):
         self.after(80, self._drain)
 
     def _on_close(self) -> None:
+        try:
+            st = self.state()
+            if st in ("zoomed", "normal"):
+                self.config["window_state"] = st
+            if st == "normal":
+                geom = self.geometry()
+                if geom:
+                    self.config["window_geometry"] = geom
+                cur_w, cur_h = self.winfo_width(), self.winfo_height()
+                if cur_w >= 940 and cur_h >= 600:
+                    self.config["window_width"] = cur_w
+                    self.config["window_height"] = cur_h
+            elif st == "zoomed":
+                cur_x, cur_y = self.winfo_x(), self.winfo_y()
+                prev_geom = str(self.config.get("window_geometry", ""))
+                if "x" in prev_geom and "+" in prev_geom:
+                    dim = prev_geom.split("+")[0]
+                    self.config["window_geometry"] = f"{dim}+{cur_x}+{cur_y}"
+                else:
+                    w = int(self.config.get("window_width", 980))
+                    h = int(self.config.get("window_height", 640))
+                    self.config["window_geometry"] = f"{w}x{h}+{cur_x}+{cur_y}"
+        except Exception:
+            pass
+        self._save_current_config()
         if self.running:
             self._stop()
         self.destroy()

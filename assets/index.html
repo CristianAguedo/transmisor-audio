@@ -1,457 +1,833 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#0b1020">
-<title>Monitor de Audio</title>
-<style>
-  :root {
-    --bg: #070b18;
-    --card: rgba(23, 32, 58, 0.72);
-    --line: rgba(148, 163, 184, 0.16);
-    --text: #f1f5f9;
-    --muted: #94a3b8;
-    --accent: #3b82f6;
-    --accent-dark: #1d4ed8;
-    --live: #10b981;
-    --danger: #ef4444;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
-    background: radial-gradient(1200px 700px at 15% -10%, #23306b 0%, transparent 55%),
-                radial-gradient(900px 600px at 110% 20%, #123a52 0%, transparent 50%),
-                var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
-  .card {
-    width: 100%;
-    max-width: 420px;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 26px;
-    padding: 34px 26px 26px;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    box-shadow: 0 26px 60px rgba(0, 0, 0, 0.55);
-    text-align: center;
-  }
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    background: rgba(148, 163, 184, 0.12);
-    color: var(--muted);
-    transition: background 0.25s, color 0.25s;
-  }
-  .badge.on { background: rgba(16, 185, 129, 0.16); color: var(--live); }
-  .badge.off { background: rgba(239, 68, 68, 0.14); color: var(--danger); }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
-  .badge.on .dot { animation: pulse 1.6s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.45); opacity: 0.45; } }
-  h1 { font-size: 1.45rem; font-weight: 700; margin: 16px 0 6px; }
-  .subtitle { color: var(--muted); font-size: 0.92rem; }
-  .source {
-    margin: 18px 0 4px;
-    padding: 12px 14px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: rgba(15, 23, 42, 0.45);
-    font-size: 0.86rem;
-    color: var(--muted);
-    word-break: break-word;
-  }
-  .source strong { color: var(--text); font-weight: 600; }
-
-  /* Audio Spectrum Visualizer Card */
-  .visualizer-wrap {
-    margin: 18px 0 6px;
-    padding: 12px 14px 10px;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    background: rgba(11, 16, 32, 0.6);
-    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.35);
-  }
-  .visualizer-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-    font-size: 0.70rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--muted);
-  }
-  .viz-live-dot {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #64748b;
-    margin-right: 5px;
-    transition: background 0.3s, box-shadow 0.3s;
-  }
-  .viz-live-dot.active {
-    background: var(--live);
-    box-shadow: 0 0 8px var(--live);
-  }
-  #spectrum {
-    width: 100%;
-    height: 64px;
-    display: block;
-    border-radius: 8px;
-  }
-
-  .btn {
-    margin-top: 18px;
-    width: 100%;
-    border: none;
-    cursor: pointer;
-    color: #fff;
-    font-size: 1.05rem;
-    font-weight: 700;
-    padding: 17px 24px;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 11px;
-    background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-    box-shadow: 0 12px 26px -8px rgba(37, 99, 235, 0.75);
-    transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
-  }
-  .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 16px 30px -8px rgba(37, 99, 235, 0.85); }
-  .btn:active:not(:disabled) { transform: translateY(0); }
-  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-  .btn.playing { background: linear-gradient(135deg, #ef4444, #b91c1c); box-shadow: 0 12px 26px -8px rgba(185, 28, 28, 0.7); }
-  .row {
-    margin-top: 20px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--muted);
-    font-size: 0.9rem;
-  }
-  input[type=range] { flex: 1; accent-color: var(--accent); height: 26px; }
-  .icon-btn {
-    background: rgba(148, 163, 184, 0.14);
-    border: none;
-    color: var(--text);
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    cursor: pointer;
-    font-size: 1.1rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .icon-btn:active { background: rgba(148, 163, 184, 0.26); }
-  .hint { margin-top: 18px; font-size: 0.78rem; color: var(--muted); min-height: 1.1em; }
-  .hint.error { color: var(--danger); }
-  .stats {
-    margin-top: 18px;
-    padding-top: 16px;
-    border-top: 1px solid var(--line);
-    display: flex;
-    justify-content: space-around;
-    font-size: 0.78rem;
-    color: var(--muted);
-  }
-  .stats b { display: block; color: var(--text); font-size: 0.95rem; font-weight: 600; margin-top: 3px; }
-</style>
-</head>
-<body>
-<div class="card">
-  <div class="badge" id="badge"><span class="dot"></span><span id="badgeText">CONECTANDO</span></div>
-  <h1>Monitor de Audio</h1>
-  <p class="subtitle">Escuchá la fuente en tiempo real</p>
-
-  <div class="source" id="source">Fuente: <strong id="sourceName">—</strong></div>
-
-  <!-- Audio Spectrum Visualizer -->
-  <div class="visualizer-wrap">
-    <div class="visualizer-header">
-      <span>ESPECTRO DE AUDIO</span>
-      <span><span class="viz-live-dot" id="vizDot"></span><span id="vizLabel">EN ESPERA</span></span>
-    </div>
-    <canvas id="spectrum" width="360" height="64"></canvas>
-  </div>
-
-  <button class="btn" id="playBtn" disabled>
-    <svg id="playIcon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-    <span id="btnText">Escuchar</span>
-  </button>
-
-  <div class="row">
-    <button class="icon-btn" id="muteBtn" title="Silenciar">🔊</button>
-    <input type="range" id="vol" min="0" max="1" step="0.02" value="1">
-  </div>
-
-  <p class="hint" id="hint"></p>
-
-  <div class="stats">
-    <div>Estado<b id="statState">—</b></div>
-    <div>Conexión<b id="statConn">—</b></div>
-    <div>Transmisión<b id="statBitrate">—</b></div>
-  </div>
-
-  <audio id="audio" preload="none" playsinline></audio>
-</div>
-
-<script>
-const audio = document.getElementById("audio");
-audio.crossOrigin = "anonymous";
-
-const playBtn = document.getElementById("playBtn");
-const btnText = document.getElementById("btnText");
-const playIcon = document.getElementById("playIcon");
-const muteBtn = document.getElementById("muteBtn");
-const vol = document.getElementById("vol");
-const hint = document.getElementById("hint");
-const badge = document.getElementById("badge");
-const badgeText = document.getElementById("badgeText");
-const sourceName = document.getElementById("sourceName");
-const statState = document.getElementById("statState");
-const statConn = document.getElementById("statConn");
-const statBitrate = document.getElementById("statBitrate");
-
-const canvas = document.getElementById("spectrum");
-const ctx = canvas.getContext("2d");
-const vizDot = document.getElementById("vizDot");
-const vizLabel = document.getElementById("vizLabel");
-
-const ICON_PLAY = "M8 5v14l11-7z";
-const ICON_PAUSE = "M6 5h4v14H6zm8 0h4v14h-4z";
-let playing = false;
-let muted = false;
-let serverDown = false;
-
-// ----------------- Web Audio API Spectrum Setup -----------------
-let audioCtx = null;
-let analyser = null;
-let sourceNode = null;
-let dataArray = null;
-let webAudioReady = false;
-
-function initWebAudio() {
-  if (webAudioReady) {
-    if (audioCtx && audioCtx.state === "suspended") {
-      audioCtx.resume();
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#060913">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Monitor de Audio</title>
+  <style>
+    :root {
+      --bg: #060913;
+      --card: rgba(17, 24, 45, 0.78);
+      --line: rgba(148, 163, 184, 0.12);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #2563eb;
+      --accent-dark: #1d4ed8;
+      --live: #10b981;
+      --danger: #ef4444;
     }
-    return;
-  }
-  try {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return;
-    audioCtx = new AudioContextClass();
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 64; // 32 frequency bins
-    analyser.smoothingTimeConstant = 0.82;
-    dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-    sourceNode = audioCtx.createMediaElementSource(audio);
-    sourceNode.connect(analyser);
-    analyser.connect(audioCtx.destination);
-    webAudioReady = true;
-  } catch (err) {
-    console.warn("Web Audio API falló o no soportado en streaming:", err);
-    webAudioReady = false;
-  }
-  if (audioCtx && audioCtx.state === "suspended") {
-    audioCtx.resume();
-  }
-}
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
 
-// Spectrum Animation Loop
-const NUM_BARS = 24;
-const prevHeights = new Array(NUM_BARS).fill(3);
-let wavePhase = 0;
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(ellipse 900px 600px at 15% 10%, rgba(37, 99, 235, 0.14) 0%, rgba(30, 58, 138, 0.05) 50%, transparent 75%),
+        radial-gradient(ellipse 850px 550px at 90% 90%, rgba(14, 116, 144, 0.12) 0%, rgba(15, 23, 42, 0.04) 50%, transparent 80%),
+        radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.65) 0%, var(--bg) 100%);
+      background-attachment: fixed;
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-x: hidden;
+    }
 
-function resizeCanvas() {
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
-}
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      padding: 34px 26px 30px;
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
+      text-align: center;
+    }
 
-function drawSpectrum() {
-  requestAnimationFrame(drawSpectrum);
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      background: rgba(148, 163, 184, 0.12);
+      color: var(--muted);
+      transition: background 0.25s, color 0.25s;
+    }
 
-  const rect = canvas.getBoundingClientRect();
-  const w = rect.width;
-  const h = rect.height;
-  ctx.clearRect(0, 0, w, h);
+    .badge.on {
+      background: rgba(16, 185, 129, 0.16);
+      color: var(--live);
+    }
 
-  if (playing && webAudioReady && analyser && dataArray) {
-    analyser.getByteFrequencyData(dataArray);
-  }
+    .badge.off {
+      background: rgba(239, 68, 68, 0.14);
+      color: var(--danger);
+    }
 
-  const barSpacing = 3;
-  const totalSpacing = (NUM_BARS - 1) * barSpacing;
-  const barWidth = Math.max(2, (w - totalSpacing) / NUM_BARS);
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: currentColor;
+    }
 
-  wavePhase += 0.05;
+    .badge.on .dot {
+      animation: pulse 1.6s ease-in-out infinite;
+    }
 
-  for (let i = 0; i < NUM_BARS; i++) {
-    let targetHeight = 3;
+    @keyframes pulse {
 
-    if (playing) {
-      if (webAudioReady && dataArray) {
-        // Read frequency data (concentrated in lower 24 bins)
-        const val = dataArray[i] || 0;
-        targetHeight = Math.max(3, (val / 255) * (h - 8));
-      } else {
-        // Fallback rhythmic wave animation if MediaElementSource is restricted by browser
-        const wave = Math.sin(wavePhase + i * 0.4) * 0.5 + 0.5;
-        const sub = Math.cos(wavePhase * 0.8 + i * 0.25) * 0.3 + 0.3;
-        targetHeight = Math.max(4, (wave * 0.65 + sub * 0.35) * (h - 10));
+      0%,
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+
+      50% {
+        transform: scale(1.45);
+        opacity: 0.45;
       }
     }
 
-    // Smooth interpolation easing
-    prevHeights[i] += (targetHeight - prevHeights[i]) * 0.25;
-    const curH = prevHeights[i];
-    const x = i * (barWidth + barSpacing);
-    const y = h - curH;
-
-    // Gradient styling
-    const grad = ctx.createLinearGradient(0, y, 0, h);
-    if (playing) {
-      grad.addColorStop(0, "#38bdf8"); // Sky blue top
-      grad.addColorStop(0.5, "#2563eb"); // Blue mid
-      grad.addColorStop(1, "#10b981"); // Emerald bottom
-    } else {
-      grad.addColorStop(0, "rgba(148, 163, 184, 0.4)");
-      grad.addColorStop(1, "rgba(51, 65, 85, 0.3)");
+    h1 {
+      font-size: 1.45rem;
+      font-weight: 700;
+      margin: 16px 0 6px;
     }
 
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    const r = Math.min(barWidth / 2, curH / 2, 3);
-    if (ctx.roundRect) {
-      ctx.roundRect(x, y, barWidth, curH, [r, r, 0, 0]);
-    } else {
-      ctx.rect(x, y, barWidth, curH);
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.92rem;
     }
-    ctx.fill();
-  }
 
-  // Update status dot & label
-  if (playing) {
-    vizDot.classList.add("active");
-    vizLabel.textContent = "EN VIVO";
-    vizLabel.style.color = "var(--live)";
-  } else {
-    vizDot.classList.remove("active");
-    vizLabel.textContent = "EN ESPERA";
-    vizLabel.style.color = "";
-  }
-}
-drawSpectrum();
+    .source {
+      margin: 18px 0 4px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.45);
+      font-size: 0.86rem;
+      color: var(--muted);
+      word-break: break-word;
+    }
 
-function setHint(text, isError) {
-  hint.textContent = text || "";
-  hint.classList.toggle("error", Boolean(isError));
-}
+    .source strong {
+      color: var(--text);
+      font-weight: 600;
+    }
 
-function setBadge(state, text) {
-  badge.classList.remove("on", "off");
-  if (state) badge.classList.add(state);
-  badgeText.textContent = text;
-}
+    /* Audio Spectrum Visualizer Card */
+    .visualizer-wrap {
+      margin: 18px 0 6px;
+      padding: 12px 14px 10px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(11, 16, 32, 0.6);
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.35);
+    }
 
-playBtn.addEventListener("click", async () => {
-  playBtn.disabled = true;
-  if (playing) {
-    playing = false;
-    audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
-    btnText.textContent = "Escuchar";
-    playIcon.setAttribute("d", ICON_PLAY);
-    playBtn.classList.remove("playing");
-    setHint("");
-  } else {
-    initWebAudio();
-    audio.src = "/stream.mp3?t=" + Date.now();
-    try {
-      await audio.play();
-      playing = true;
-      btnText.textContent = "Pausar";
-      playIcon.setAttribute("d", ICON_PAUSE);
-      playBtn.classList.add("playing");
-      setHint("");
-    } catch (err) {
+    .visualizer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 0.70rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .viz-live-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #64748b;
+      margin-right: 5px;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .viz-live-dot.active {
+      background: var(--live);
+      box-shadow: 0 0 8px var(--live);
+    }
+
+    #spectrum {
+      width: 100%;
+      height: 64px;
+      display: block;
+      border-radius: 8px;
+    }
+
+    .btn {
+      margin-top: 18px;
+      width: 100%;
+      border: none;
+      cursor: pointer;
+      color: #fff;
+      font-size: 1.05rem;
+      font-weight: 700;
+      padding: 17px 24px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 11px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      box-shadow: 0 12px 26px -8px rgba(37, 99, 235, 0.75);
+      transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 30px -8px rgba(37, 99, 235, 0.85);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn.playing {
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      box-shadow: 0 12px 26px -8px rgba(185, 28, 28, 0.7);
+    }
+
+    .row {
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    input[type=range] {
+      flex: 1;
+      accent-color: var(--accent);
+      height: 26px;
+    }
+
+    .icon-btn {
+      background: rgba(148, 163, 184, 0.14);
+      border: none;
+      color: var(--text);
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon-btn:active {
+      background: rgba(148, 163, 184, 0.26);
+    }
+
+    .hint {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .hint.error {
+      color: var(--danger);
+    }
+
+    .mode-bar {
+      display: flex;
+      gap: 6px;
+      margin: 14px 0 6px;
+      background: rgba(11, 16, 32, 0.5);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+    }
+
+    .mode-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 600;
+      padding: 8px 10px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .mode-btn.active {
+      background: rgba(37, 99, 235, 0.28);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="badge" id="badge"><span class="dot"></span><span id="badgeText">CONECTANDO</span></div>
+    <h1>Monitor de Audio <span style="font-size:0.55em;color:#38bdf8;font-weight:600;vertical-align:middle;margin-left:6px;">v1.0</span></h1>
+    <!-- <p class="subtitle">Escuchá la fuente en tiempo real</p> -->
+
+    <div class="source" id="source"><strong id="sourceName">—</strong></div>
+
+    <div class="mode-bar">
+      <button class="mode-btn active" id="btnModeStability">📶 Estabilidad</button>
+      <button class="mode-btn" id="btnModeLowLatency">⚡ Baja Latencia</button>
+    </div>
+    
+    <!-- Audio Spectrum Visualizer -->
+    <div class="visualizer-wrap">
+      <div class="visualizer-header">
+        <span>ESPECTRO DE AUDIO</span>
+        <div style="display:flex;align-items:center;">
+          <span class="viz-live-dot" id="vizDot"></span>
+          <span id="vizLabel">EN ESPERA</span>
+        </div>
+      </div>
+      <canvas id="spectrum" width="360" height="64"></canvas>
+    </div>
+
+    <button class="btn" id="playBtn" disabled>
+      <svg id="playIcon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+      <span id="btnText">Escuchar</span>
+    </button>
+
+    <div class="row">
+      <button class="icon-btn" id="muteBtn" title="Silenciar">🔊</button>
+      <input type="range" id="vol" min="0" max="1" step="0.02" value="1">
+    </div>
+
+    <p class="hint" id="hint"></p>
+
+    <audio id="audio" preload="none" playsinline crossorigin="anonymous"></audio>
+  </div>
+
+  <script>
+    const audio = document.getElementById("audio");
+
+    const playBtn = document.getElementById("playBtn");
+    const btnText = document.getElementById("btnText");
+    const playIcon = document.getElementById("playIcon");
+    const muteBtn = document.getElementById("muteBtn");
+    const vol = document.getElementById("vol");
+    const hint = document.getElementById("hint");
+    const badge = document.getElementById("badge");
+    const badgeText = document.getElementById("badgeText");
+    const sourceName = document.getElementById("sourceName");
+
+    const canvas = document.getElementById("spectrum");
+    const ctx = canvas.getContext("2d");
+    const vizDot = document.getElementById("vizDot");
+    const vizLabel = document.getElementById("vizLabel");
+
+    const ICON_PLAY = "M8 5v14l11-7z";
+    const ICON_PAUSE = "M6 5h4v14H6zm8 0h4v14h-4z";
+    let playing = false;
+    let muted = false;
+    let serverDown = false;
+    let isTransmitting = false;
+
+    // Web Audio API: Analizador de espectro en tiempo real
+    let audioCtx = null;
+    let analyser = null;
+    let gainNode = null;
+    let dataArray = null;
+
+    function setupAudioContext() {
+      if (audioCtx) {
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+        return;
+      }
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        audioCtx = new AudioContextClass();
+        const source = audioCtx.createMediaElementSource(audio);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 64; // 32 bandas de frecuencia
+        analyser.smoothingTimeConstant = 0.82;
+        gainNode = audioCtx.createGain();
+        const currentVol = Number(vol.value);
+        gainNode.gain.value = muted ? 0 : currentVol;
+
+        source.connect(analyser);
+        analyser.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+      } catch (e) {
+        console.warn("Web Audio API no disponible:", e);
+      }
+    }
+
+    const NUM_BARS = 24;
+    const prevHeights = new Array(NUM_BARS).fill(3);
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    function drawSpectrum() {
+      requestAnimationFrame(drawSpectrum);
+
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const barSpacing = 3;
+      const totalSpacing = (NUM_BARS - 1) * barSpacing;
+      const barWidth = Math.max(2, (w - totalSpacing) / NUM_BARS);
+
+      let hasRealAudio = false;
+
+      if (playing && analyser && dataArray) {
+        analyser.getByteFrequencyData(dataArray);
+        for (let j = 0; j < NUM_BARS; j++) {
+          if (dataArray[j] > 10) {
+            hasRealAudio = true;
+            break;
+          }
+        }
+      }
+
+      for (let i = 0; i < NUM_BARS; i++) {
+        let targetHeight = 3;
+
+        if (playing && analyser && dataArray) {
+          const val = dataArray[i] || 0; // Amplitud real 0-255
+          const percent = Math.min(1, Math.max(0, val / 255));
+          const curved = Math.pow(percent, 0.85);
+          targetHeight = Math.max(3, curved * (h - 8));
+        }
+
+        // Suavizado dinámico
+        prevHeights[i] += (targetHeight - prevHeights[i]) * 0.35;
+        const curH = prevHeights[i];
+        const x = i * (barWidth + barSpacing);
+        const y = h - curH;
+
+        const grad = ctx.createLinearGradient(0, y, 0, h);
+        if (playing && curH > 4) {
+          grad.addColorStop(0, "#38bdf8"); // Celeste brillante
+          grad.addColorStop(0.5, "#2563eb"); // Azul medio
+          grad.addColorStop(1, "#10b981"); // Esmeralda
+        } else {
+          grad.addColorStop(0, "rgba(148, 163, 184, 0.35)");
+          grad.addColorStop(1, "rgba(51, 65, 85, 0.25)");
+        }
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        const r = Math.min(barWidth / 2, curH / 2, 3);
+        if (ctx.roundRect) {
+          ctx.roundRect(x, y, barWidth, curH, [r, r, 0, 0]);
+        } else {
+          ctx.rect(x, y, barWidth, curH);
+        }
+        ctx.fill();
+      }
+
+      if (vizDot) {
+        vizDot.classList.toggle("active", playing && hasRealAudio);
+      }
+      if (vizLabel) {
+        if (playing) {
+          vizLabel.textContent = hasRealAudio ? "EN VIVO" : "SIN AUDIO";
+          vizLabel.style.color = hasRealAudio ? "var(--live)" : "var(--muted)";
+        } else {
+          vizLabel.textContent = "EN ESPERA";
+          vizLabel.style.color = "";
+        }
+      }
+    }
+    drawSpectrum();
+
+    function setHint(text, isError) {
+      hint.textContent = text || "";
+      hint.classList.toggle("error", Boolean(isError));
+    }
+
+    function setBadge(state, text) {
+      badge.classList.remove("on", "off");
+      if (state) badge.classList.add(state);
+      badgeText.textContent = text;
+    }
+
+    // Configuración de modo: Estabilidad (por defecto) vs Baja Latencia
+    let currentMode = "stability"; // Por defecto en Estabilidad
+
+    const btnModeStability = document.getElementById("btnModeStability");
+    const btnModeLowLatency = document.getElementById("btnModeLowLatency");
+
+    function updateModeUI() {
+      if (btnModeStability && btnModeLowLatency) {
+        btnModeStability.classList.toggle("active", currentMode === "stability");
+        btnModeLowLatency.classList.toggle("active", currentMode === "lowLatency");
+      }
+    }
+    updateModeUI();
+
+    if (btnModeStability) {
+      btnModeStability.addEventListener("click", () => {
+        if (currentMode !== "stability") {
+          currentMode = "stability";
+          updateModeUI();
+          if (playing) {
+            stopAudio();
+            startAudio(false);
+          }
+        }
+      });
+    }
+
+    if (btnModeLowLatency) {
+      btnModeLowLatency.addEventListener("click", () => {
+        if (currentMode !== "lowLatency") {
+          currentMode = "lowLatency";
+          updateModeUI();
+          if (playing) {
+            stopAudio();
+            startAudio(false);
+          }
+        }
+      });
+    }
+
+    let userPausedManually = false;
+    let wasListening = false;
+    let autoplayAttempted = false;
+    let pcmAbortController = null;
+    let nextPlayTime = 0;
+
+    async function startAudio(isAutoplay = false) {
+      if (playing) return;
+      setupAudioContext();
+      if (audioCtx && audioCtx.state === "suspended") {
+        try { await audioCtx.resume(); } catch (e) {}
+      }
+
+      if (currentMode === "stability") {
+        setHint(isAutoplay ? "" : "Conectando al stream (Estabilidad)...");
+        try {
+          audio.src = `/stream.mp3?burst=1&t=${Date.now()}`;
+          audio.load();
+          const p = audio.play();
+          if (p !== undefined) {
+            await p;
+          }
+          playing = true;
+          wasListening = true;
+          btnText.textContent = "Pausar";
+          playIcon.setAttribute("d", ICON_PAUSE);
+          playBtn.classList.add("playing");
+          setHint("");
+        } catch (err) {
+          playing = false;
+          btnText.textContent = "Escuchar";
+          playIcon.setAttribute("d", ICON_PLAY);
+          playBtn.classList.remove("playing");
+          if (isAutoplay) {
+            setHint("Toca 'Escuchar' para activar el sonido");
+            armOneTouchUnlock();
+          } else {
+            setHint("No se pudo iniciar el audio: toca 'Escuchar' nuevamente");
+          }
+        }
+      } else {
+        // Modo Baja Latencia: streaming PCM directo por Web Audio API (~40-60 ms)
+        setHint(isAutoplay ? "" : "Conectando (Baja latencia ~50ms)...");
+        try {
+          if (pcmAbortController) {
+            pcmAbortController.abort();
+          }
+          pcmAbortController = new AbortController();
+          const signal = pcmAbortController.signal;
+          nextPlayTime = 0;
+
+          const response = await fetch('/stream.pcm?t=' + Date.now(), { signal, cache: 'no-store' });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+
+          const rateHeader = parseInt(response.headers.get('X-Audio-Rate') || "48000", 10);
+          const chHeader = parseInt(response.headers.get('X-Audio-Channels') || "2", 10);
+          const streamRate = (rateHeader >= 8000 && rateHeader <= 192000) ? rateHeader : 48000;
+          const streamChannels = (chHeader === 1 || chHeader === 2) ? chHeader : 2;
+
+          playing = true;
+          wasListening = true;
+          btnText.textContent = "Pausar";
+          playIcon.setAttribute("d", ICON_PAUSE);
+          playBtn.classList.add("playing");
+          setHint("");
+
+          runPcmReader(response.body.getReader(), streamRate, streamChannels, signal);
+        } catch (err) {
+          playing = false;
+          btnText.textContent = "Escuchar";
+          playIcon.setAttribute("d", ICON_PLAY);
+          playBtn.classList.remove("playing");
+          if (isAutoplay) {
+            setHint("Toca 'Escuchar' para activar el sonido");
+            armOneTouchUnlock();
+          } else {
+            setHint("No se pudo iniciar: toca 'Escuchar' nuevamente");
+          }
+        }
+      }
+    }
+
+    async function runPcmReader(reader, streamRate, streamChannels, signal) {
+      let leftover = new Uint8Array(0);
+      nextPlayTime = 0;
+      const LEAD_TIME = 0.075; // 75 ms de colchón anti-jitter (imperceptible al oído y súper estable en Wi-Fi)
+      const MAX_AHEAD = 0.180; // Si supera 180 ms de cola futura (ej. bloqueo de pantalla), descartar exceso
+
+      try {
+        while (playing && !signal.aborted) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value || value.length === 0) continue;
+
+          let data;
+          if (leftover.length > 0) {
+            data = new Uint8Array(leftover.length + value.length);
+            data.set(leftover);
+            data.set(value, leftover.length);
+            leftover = new Uint8Array(0);
+          } else {
+            data = value;
+          }
+
+          const bytesPerFrame = streamChannels * 2;
+          const remainder = data.length % bytesPerFrame;
+          if (remainder > 0) {
+            leftover = data.slice(data.length - remainder);
+            data = data.subarray(0, data.length - remainder);
+          }
+          if (data.length === 0) continue;
+
+          const numFrames = data.length / bytesPerFrame;
+          const chunkDuration = numFrames / streamRate;
+          const now = audioCtx.currentTime;
+
+          // Si el audio encolado ya supera 180 ms en el futuro (ej. ráfaga de red tras pausa o bloqueo),
+          // descartar este bloque para devolver la reproducción al tiempo real instantáneo sin lag
+          if (nextPlayTime > now + MAX_AHEAD) {
+            continue;
+          }
+
+          const audioBuffer = audioCtx.createBuffer(streamChannels, numFrames, streamRate);
+          const dataView = new DataView(data.buffer, data.byteOffset, data.length);
+
+          if (streamChannels === 1) {
+            const ch0 = audioBuffer.getChannelData(0);
+            for (let i = 0; i < numFrames; i++) {
+              ch0[i] = dataView.getInt16(i * 2, true) / 32768.0;
+            }
+          } else {
+            const ch0 = audioBuffer.getChannelData(0);
+            const ch1 = audioBuffer.getChannelData(1);
+            for (let i = 0; i < numFrames; i++) {
+              const offset = i * 4;
+              ch0[i] = dataView.getInt16(offset, true) / 32768.0;
+              ch1[i] = dataView.getInt16(offset + 2, true) / 32768.0;
+            }
+          }
+
+          const sourceNode = audioCtx.createBufferSource();
+          sourceNode.buffer = audioBuffer;
+          sourceNode.connect(analyser);
+
+          // Si el cursor quedó atrás en el tiempo o es el primer bloque, arrancar con margen de 75 ms
+          if (nextPlayTime < now) {
+            nextPlayTime = now + LEAD_TIME;
+          }
+          sourceNode.start(nextPlayTime);
+          nextPlayTime += chunkDuration;
+        }
+      } catch (e) {
+        if (!signal.aborted && playing) {
+          stopAudio();
+          setHint("Conexión interrumpida. Reconectando...");
+          setTimeout(() => {
+            if (isTransmitting && !userPausedManually && wasListening) {
+              startAudio(false);
+            }
+          }, 1200);
+        }
+      }
+    }
+
+    function stopAudio() {
       playing = false;
+      if (pcmAbortController) {
+        try { pcmAbortController.abort(); } catch (e) {}
+        pcmAbortController = null;
+      }
+      try {
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+      } catch (e) { }
       btnText.textContent = "Escuchar";
       playIcon.setAttribute("d", ICON_PLAY);
       playBtn.classList.remove("playing");
-      setHint("No se pudo reproducir. Tocá de nuevo o revisá el firewall.", true);
     }
-  }
-  playBtn.disabled = false;
-});
 
-vol.addEventListener("input", () => { audio.volume = Number(vol.value); });
-muteBtn.addEventListener("click", () => {
-  muted = !muted;
-  audio.muted = muted;
-  muteBtn.textContent = muted ? "🔇" : "🔊";
-});
-
-audio.addEventListener("waiting", () => setHint("Buffering…"));
-audio.addEventListener("playing", () => setHint(""));
-audio.addEventListener("error", () => {
-  if (!playing) return;
-  playing = false;
-  playBtn.classList.remove("playing");
-  btnText.textContent = "Escuchar";
-  playIcon.setAttribute("d", ICON_PLAY);
-  setHint("Se cortó la transmisión.", true);
-});
-
-async function poll() {
-  try {
-    const res = await fetch("/api/status?t=" + Date.now(), { cache: "no-store" });
-    const data = await res.json();
-    const on = Boolean(data.transmitting);
-    setBadge(on ? "on" : "off", on ? "EN VIVO" : "SIN EMISIÓN");
-    playBtn.disabled = !on;
-    statState.textContent = on ? "Emitiendo" : "Detenido";
-    statConn.textContent = (data.clients || 0) + (data.clients === 1 ? " oyente" : " oyentes");
-    statBitrate.textContent = data.bitrate || "—";
-    const detail = [data.samplerate ? data.samplerate + " Hz" : null, data.bitrate || null]
-      .filter(Boolean).join(" · ");
-    sourceName.textContent = (data.device || "desconocida") + (detail ? " — " + detail : "");
-    if (on) {
-      if (serverDown && !playing) setHint("");
-      serverDown = false;
-    } else {
-      serverDown = true;
-      if (!playing) setHint("El servidor no está emitiendo audio.", true);
+    function armOneTouchUnlock() {
+      const onUserTouch = () => {
+        window.removeEventListener("click", onUserTouch);
+        window.removeEventListener("touchstart", onUserTouch);
+        window.removeEventListener("keydown", onUserTouch);
+        setupAudioContext();
+        if (!playing && isTransmitting && !userPausedManually) {
+          startAudio(false);
+        }
+      };
+      window.addEventListener("click", onUserTouch, { once: true });
+      window.addEventListener("touchstart", onUserTouch, { once: true });
+      window.addEventListener("keydown", onUserTouch, { once: true });
     }
-  } catch (err) {
-    setBadge("off", "SIN CONEXIÓN");
-    statState.textContent = "Sin conexión";
-  }
-  setTimeout(poll, 1500);
-}
-poll();
-</script>
+
+    playBtn.addEventListener("click", async () => {
+      if (!isTransmitting) return;
+      setupAudioContext();
+      if (playing) {
+        userPausedManually = true;
+        wasListening = false;
+        stopAudio();
+        setHint("Audio pausado");
+      } else {
+        userPausedManually = false;
+        wasListening = true;
+        await startAudio(false);
+      }
+    });
+
+    vol.addEventListener("input", () => {
+      const v = Number(vol.value);
+      audio.volume = v;
+      if (gainNode) gainNode.gain.value = muted ? 0 : v;
+    });
+    muteBtn.addEventListener("click", () => {
+      muted = !muted;
+      audio.muted = muted;
+      if (gainNode) gainNode.gain.value = muted ? 0 : Number(vol.value);
+      muteBtn.textContent = muted ? "🔇" : "🔊";
+    });
+
+    audio.addEventListener("waiting", () => {
+      if (playing) setHint("Sincronizando audio…");
+    });
+    audio.addEventListener("playing", () => {
+      setHint("");
+      playing = true;
+      wasListening = true;
+      btnText.textContent = "Pausar";
+      playIcon.setAttribute("d", ICON_PAUSE);
+      playBtn.classList.add("playing");
+    });
+    audio.addEventListener("error", () => {
+      if (!playing && !wasListening) return;
+      stopAudio();
+      if (isTransmitting && !userPausedManually && wasListening) {
+        setHint("Reconectando audio...");
+        setTimeout(() => {
+          if (isTransmitting && !userPausedManually && wasListening) {
+            startAudio(false);
+          }
+        }, 1500);
+      }
+    });
+
+    async function poll() {
+      try {
+        const res = await fetch("/api/status?t=" + Date.now(), { cache: "no-store" });
+        const data = await res.json();
+        const on = Boolean(data.transmitting);
+        isTransmitting = on;
+        setBadge(on ? "on" : "off", on ? "EN VIVO" : "SIN EMISIÓN");
+        playBtn.disabled = !on;
+
+        const detail = [data.samplerate ? data.samplerate + " Hz" : null, data.bitrate || null]
+          .filter(Boolean).join(" · ");
+        sourceName.textContent = (data.device || "desconocida") + (detail ? " — " + detail : "");
+
+        if (on) {
+          serverDown = false;
+          // Solo intentar autoplay una única vez al abrir la página
+          if (!playing && !userPausedManually) {
+            if (!autoplayAttempted) {
+              autoplayAttempted = true;
+              startAudio(true);
+            } else if (wasListening) {
+              // Si el usuario estaba escuchando y la transmisión volvió a iniciar, reconectar
+              startAudio(false);
+            }
+          }
+        } else {
+          serverDown = true;
+          if (playing) {
+            wasListening = true;
+            stopAudio();
+          }
+          setHint("Transmisión detenida por el emisor. Reconectando apenas inicie...", false);
+        }
+      } catch (err) {
+        setBadge("off", "SIN CONEXIÓN");
+        isTransmitting = false;
+        if (playing) {
+          wasListening = true;
+          stopAudio();
+        }
+        setHint("Buscando señal de transmisión...", false);
+      }
+      setTimeout(poll, 1200);
+    }
+    poll();
+  </script>
 </body>
+
 </html>

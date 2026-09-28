@@ -54,18 +54,24 @@ $arguments = @(
     "--paths", ".",
     "--add-data", "assets;assets",
     "--collect-all", "customtkinter",
+    "--collect-all", "pyaudiowpatch",
     "--hidden-import", "core.devices",
     "--hidden-import", "core.encoder",
     "--hidden-import", "core.server",
     "--hidden-import", "core.ffmpeg_bin",
     "--hidden-import", "core.applog",
+    "--hidden-import", "core.config",
     "app.py"
 )
 
 if ($OneFile) {
     $arguments = @("-m", "PyInstaller", "--noconfirm", "--clean", "--name", "TransmisorAudio",
                    "--windowed", "--onefile", "--paths", ".", "--add-data", "assets;assets",
-                   "--collect-all", "customtkinter", "app.py")
+                   "--collect-all", "customtkinter", "--collect-all", "pyaudiowpatch",
+                   "--hidden-import", "core.devices", "--hidden-import", "core.encoder",
+                   "--hidden-import", "core.server", "--hidden-import", "core.ffmpeg_bin",
+                   "--hidden-import", "core.applog", "--hidden-import", "core.config",
+                   "app.py")
 } else {
     $arguments = $arguments[0..($arguments.Count - 2)] + "--onedir" + $arguments[-1]
 }

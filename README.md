@@ -1,134 +1,218 @@
-# Transmisor de Audio LAN
+# Transmisor de Audio LAN 📡
 
-Convierte la entrada de audio de una placa de sonido en un servidor MP3 dentro de la red local.
-Desde el celu, la tablet o cualquier otra PC se escucha con el navegador (o con VLC) sin instalar nada.
+[![Windows](https://img.shields.io/badge/Plataforma-Windows%2010%20%2F%2011-0078d4?logo=windows&logoColor=white)](https://microsoft.com/windows)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab?logo=python&logoColor=white)](https://python.org)
+[![WASAPI](https://img.shields.io/badge/Audio-WASAPI%20Loopback-10b981)](https://learn.microsoft.com/en-us/windows/win32/coreaudio/wasapi)
+[![Web Audio API](https://img.shields.io/badge/Web%20Audio-Baja%20Latencia-f59e0b)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
+[![FFmpeg](https://img.shields.io/badge/Encoder-FFmpeg-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org)
 
-## Qué hace
+Aplicación moderna para Windows que transmite el audio de tu PC a cualquier dispositivo en la red local (celulares, Smart TVs, tablets, notebooks o reproductores multimedia) a través de un navegador web o enlace directo, **sin necesidad de instalar aplicaciones en los clientes**.
 
-- Captura la entrada física elegida (micrófono, interfaz, mezcladora) con FFmpeg.
-- La convierte a MP3 y la sirve por HTTP en streaming, sin grabar a disco.
-- Cada dispositivo que se conecta recibe la señal por su propia cola: un oyente lento
-  no corta el audio de los demás.
-- Muestra en vivo la URL, el código QR, los oyentes conectados y los kbps reales.
-- No guarda archivos ni pide contraseña: la emisión existe solo mientras el botón está en verde.
+Permite capturar tanto entradas físicas (micrófonos, consolas, interfaces) como el sonido del sistema en vivo (**WASAPI Loopback**, para escuchar Spotify, juegos, videos, DAWs o cualquier programa).
 
-## Requisitos
+---
 
-- Windows 10 u 11.
-- Python 3.10 o superior (solo para compilar; la aplicación final no lo necesita).
-- `ffmpeg.exe` en la misma carpeta que el programa. Si no está, el botón **Examinar** permite buscarlo.
+## 🚀 Características Principales
 
-## Instalación
+* **Arquitectura Híbrida de Doble Modo:**
+  * **`📶 Estabilidad` (Modo por defecto):** Flujo continuo HTTP MP3 (`/stream.mp3`) con sincronización exacta de cabeceras y búfer de pre-roll. Diseñado para máxima compatibilidad con **Smart TVs antiguas (2012–presente)**, VLC, radios Wi-Fi y navegadores estándar sin cortes ni interrupciones.
+  * **`⚡ Baja Latencia` (Celulares y tablets):** Transmisión directa de audio sin comprimir PCM de 16 bits (`/stream.pcm`) procesada en tiempo real mediante **Web Audio API**. Ofrece una latencia ultra-baja en milisegundos (**~75 ms**) ideal para sincronización con video y juegos.
+* **Captura Nativa WASAPI Loopback:** Graba el sonido interno de Windows directamente desde el bus de audio sin requerir cables virtuales (Virtual Audio Cable / Stereo Mix).
+* **Espectro de Audio Real:** Visualizador de frecuencias en vivo en el navegador mediante Transformada Rápida de Fourier (FFT), reaccionando a graves, medios y agudos reales (con detección de silencio plano).
+* **Multidispositivo sin interferencias:** Cada cliente conectado cuenta con su propia cola de memoria desacoplada del motor de codificación; si un dispositivo tiene una señal débil de Wi-Fi, no afecta ni entrecorta la reproducción de los demás.
+* **Control Inteligente de Jitter Wi-Fi:** Búfer dinámico que absorbe fluctuaciones de red y descarta excesos acumulados tras bloqueos de pantalla, garantizando que el audio se mantenga siempre pegado al tiempo real.
+* **Facilidad de Conexión:** Generación automática de código QR y URL directa en la interfaz para escanear y escuchar al instante.
+* **Persistencia de Ajustes:** Guarda automáticamente la configuración de dispositivo, puerto, bitrate y modo en `config.json`.
 
-1. Copiá la carpeta `TransmisorAudio` completa al equipo donde está la placa de audio.
-2. Abrí `TransmisorAudio.exe`. No requiere instalación ni permisos de administrador
-   (salvo que quieras agregarlo al firewall, que sí pide permisos).
-3. Elegí la entrada en la lista y tocá **Probar**. Si marca la barra de nivel, esa entrada sirve.
-4. Tocá **Iniciar transmisión**.
+---
 
-## Cómo escucharlo
+## 📋 Requisitos del Sistema
 
-| Dispositivo | Cómo |
-| --- | --- |
-| Celu o tablet | Conectate a la misma red y abrí la URL en el navegador (el QR la copia directo). |
-| PC con Windows | `http://IPDELPC:9000` en el navegador, o VLC → **Abrir red**. |
-| VLC en cualquier equipo | URL directa: `http://IPDELPC:9000/stream.mp3` |
-| Teléfono Android | `Chrome` o `VLC` con la URL `/stream.mp3`. En Android el navegador no siempre reproduce MP3 en directo: usá VLC. |
-| Altavoz inteligente / radio | No compatible: necesitan HLS o IceCast, no MP3 chunked. |
+### Para Ejecutar la Aplicación:
+* **Sistema Operativo:** Windows 10 o Windows 11 (64-bit).
+* **Conexión de Red:** Wi-Fi o cable Ethernet en la misma red local que los dispositivos receptores.
+* **Binario de FFmpeg:** `ffmpeg.exe` (incluido junto al programa o seleccionable con el botón *Examinar*).
 
-La URL completa se ve en el panel derecho, junto al QR, e incluye la IP de la red del equipo
-(por ejemplo `http://192.168.1.36:9000`).
+### Para Desarrollar o Compilar:
+* **Python:** 3.10 o superior (recomendado 3.11 / 3.12 / 3.13).
+* **PowerShell:** 5.1 o superior.
 
-## Ajustes disponibles
+---
 
-| Opción | Valores | Por defecto | Para qué sirve |
-| --- | --- | --- | --- |
-| Puerto | 1025–65535 | `9000` | Cambialo si otro programa ya lo usa. |
-| Bitrate | 96k, 128k, 160k, 192k, 256k | `128k` | Más alto = mejor calidad y más consumo de datos. |
-| Sample rate | 22050, 32000, 44100, 48000 | `44100` | 44100 sirve para casi todo. |
-| Canales | Original, Mono, Estéreo | Original | Forzá mono para Voz de la radio o escenarios IA. |
-| Buffer (MB) | 1 a 32 | `4` | Más buffer = más estable con Wi‑Fi flojo, más latencia. |
-| Captura sin buffer | on/off | on | Menos latencia de entrada; si la captura se corta, desmarcá y subí el buffer. |
+## 🛠️ Instalación y Uso Rápido en Windows
 
-**Latencia:** el stream es en vivo, no diferido. Se acumulan entre 0,2 s y 1 s
-según el dispositivo, la red y el navegador. La primera carga del player tarda un poco más
-porque espera los primeros chunks.
+1. Descarga o descomprime la carpeta de la aplicación (`dist\TransmisorAudio\`).
+2. Asegúrate de que `ffmpeg.exe` esté presente en la misma carpeta que `TransmisorAudio.exe`.
+3. Ejecuta `TransmisorAudio.exe` (no requiere privilegios de administrador para el uso habitual).
+4. En el menú desplegable **Entrada de audio**, selecciona la fuente deseada:
+   * Para transmitir lo que suena en la PC: elige la opción que termina en **`[Loopback]`** (por ejemplo, `Altavoces (High Definition Audio Device) [Loopback]`).
+   * Para transmitir un micrófono o instrumento: elige el micrófono o interfaz correspondiente.
+5. Haz clic en **Iniciar transmisión**.
+6. Escanea el código QR desde tu celular o ingresa la URL mostrada en el navegador de cualquier dispositivo de la red local.
 
-## Firewall
+---
 
-La primera vez, Windows puede bloquear las conexiones entrantes. El programa avisa con un botón
-que abre PowerShell con el comando listo (necesita permisos de administrador):
+## 📱 Cómo Escuchar desde Distintos Dispositivos
 
-```powershell
-New-NetFirewallRule -DisplayName "Audio LAN" -Direction Inbound -LocalPort 9000 -Protocol TCP -Action Allow -Profile Private
-```
+| Dispositivo / Receptor | Modo Recomendado | Cómo conectarse |
+| :--- | :---: | :--- |
+| **Celulares (Android / iOS)** | `⚡ Baja Latencia` | Escanear el código QR con la cámara o abrir la URL en Chrome/Safari. Toca **Escuchar** y selecciona **Baja Latencia** para respuesta instantánea (~75 ms). |
+| **Smart TVs (LG webOS, Samsung Tizen, Android TV, etc.)** | `📶 Estabilidad` | Abrir el navegador de la TV e ingresar la URL del emisor (ej. `http://192.168.1.35:9000`). Se reproduce automáticamente en modo estabilidad por el elemento nativo de audio. |
+| **VLC Media Player (PC / Mac / Linux / TV Box)** | Enlace directo | Ir a **Medio** → **Abrir ubicación de red** e ingresar: `http://IP_DE_TU_PC:9000/stream.mp3` |
+| **Navegador en otra PC / Notebook** | Ambos modos | Abrir `http://IP_DE_TU_PC:9000` en Chrome, Edge, Firefox, etc. |
 
-Si cambiás el puerto, reemplazá `9000`. Si la red Wi‑Fi del router está marcada como "Pública",
-usá `-Profile Any` o cambiá el perfil de la red a Privada en la configuración de Windows.
+> [!TIP]
+> **Políticas de Autoplay en Navegadores:** Por seguridad, los navegadores móviles requieren que el usuario toque la pantalla una vez para habilitar el sonido. Basta con presionar el botón **Escuchar** en la página web.
 
-## Estructura
+---
 
-```
-TransmisorAudio/
-├── TransmisorAudio.exe   programa
-├── ffmpeg.exe            motor de captura y conversión
-└── _internal/            recursos de Python y del player web
-```
+## 🛡️ Configuración del Firewall de Windows
 
-Para distribuirlo, copiá la carpeta completa. No sirve solo el `.exe`.
-
-## Compilar desde el código
+Al abrir un servidor HTTP en la red local, el Firewall de Windows puede solicitar autorización para aceptar conexiones entrantes. Si los dispositivos no logran cargar la página web, ejecuta la siguiente regla en **PowerShell como Administrador**:
 
 ```powershell
-git clone <repo> ; cd stream-audio
-python -m pip install -r requirements.txt
+New-NetFirewallRule -DisplayName "Transmisor Audio LAN" -Direction Inbound -LocalPort 9000 -Protocol TCP -Action Allow -Profile Private
+```
+
+*(Si configuraste un puerto diferente a `9000`, cambia el valor en `-LocalPort`).*
+
+> [!NOTE]
+> Asegúrate de que la red Wi-Fi de tu PC esté configurada como **Red Privada** en Windows (en Redes Públicas el sistema bloquea por defecto la comunicación entre dispositivos).
+
+---
+
+## ⚙️ Opciones de Configuración
+
+| Parámetro | Rango / Opciones | Valor por Defecto | Descripción |
+| :--- | :---: | :---: | :--- |
+| **Puerto** | `1025` – `65535` | `9000` | Puerto TCP en el que escucha el servidor web. |
+| **Bitrate MP3** | `96k` a `320k` | `128k` | Calidad de compresión para el modo Estabilidad / Smart TVs. |
+| **Frecuencia (Hz)** | `22050` a `48000` | `44100` / `48000` | Frecuencia de codificación de salida. |
+| **Canales** | `Original`, `Mono`, `Estéreo` | `Original` | Permite forzar audio monofónico para voz o conservar el estéreo. |
+| **Búfer de captura**| `1` a `32 MB` | `4 MB` | Búfer en memoria RAM para amortiguar picos de uso del procesador. |
+| **Sin búfer (Low Latency)**| Activado / Desactivado | Activado | Desactiva retardos internos de multiplexación en FFmpeg. |
+| **Autoiniciar** | Activado / Desactivado | Desactivado | Comienza a emitir automáticamente apenas se abre la aplicación. |
+
+La configuración se almacena en `%LOCALAPPDATA%\TransmisorAudio\config.json`.
+
+---
+
+## 🏗️ Compilación desde el Código Fuente
+
+El proyecto utiliza **PyInstaller** y un script automatizado en PowerShell (`build.ps1`) para generar el ejecutable.
+
+### 1. Clonar el Repositorio e Instalar Dependencias
+
+```powershell
+# Clonar el proyecto
+git clone https://github.com/tu-usuario/stream-audio.git
+cd stream-audio
+
+# Crear y activar entorno virtual (recomendado)
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# Instalar librerías necesarias
+pip install -r requirements.txt
+```
+
+### 2. Opciones de Compilación con `build.ps1`
+
+El script `build.ps1` gestiona la recolección de archivos, temas visuales de CustomTkinter, controladores de PortAudio y binarios:
+
+```powershell
+# Compilación estándar (Recomendada: genera carpeta dist\TransmisorAudio\ con arranque instantáneo)
 .\build.ps1
+
+# Compilación rápida sin reinstalar dependencias de pip
+.\build.ps1 -SkipDeps
+
+# Generar un único archivo ejecutable portátil (dist\TransmisorAudio.exe)
+.\build.ps1 -OneFile
 ```
 
-- `.\build.ps1` → `dist\TransmisorAudio\` (carpeta, arranque instantáneo). Es el modo recomendado.
-- `.\build.ps1 -OneFile` → `dist\TransmisorAudio.exe` (un archivo, ~3 s de arranque).
-- `.\build.ps1 -SkipDeps` → no reinstala dependencias (rebuilds rápidos).
+Al finalizar la compilación, el ejecutable y sus recursos quedarán en:
+* `dist\TransmisorAudio\TransmisorAudio.exe`
 
-Si `ffmpeg.exe` no está en el `PATH`, el script usa el que está en la raíz del proyecto y lo
-copia junto al programa.
+Para distribuir el programa a otra computadora, copia la carpeta completa `dist\TransmisorAudio\`.
 
-## Archivos del proyecto
+---
 
-| Archivo | Rol |
-| --- | --- |
-| `app.py` | Interfaz, selección de entrada, métricas, QR, firewall. |
-| `core/ffmpeg_bin.py` | Encuentra `ffmpeg.exe` y los recursos empaquetados. |
-| `core/devices.py` | Lista y prueba entradas de DirectShow. |
-| `core/encoder.py` | Proceso FFmpeg, lectura de MP3 y estadísticas. |
-| `core/server.py` | Servidor HTTP, chunked, cola por cliente. |
-| `core/applog.py` | Logs con rotación. |
-| `assets/index.html` | Player web (HTML + CSS + JS en un archivo). |
+## 🔬 Arquitectura y Detalles Técnicos
 
-## Diagnóstico
+```
+                      ┌───────────────────────────────────────┐
+                      │      WASAPI Loopback / Micrófono      │
+                      │       (Hardware de Audio Windows)     │
+                      └──────────────────┬────────────────────┘
+                                         │
+                   Audio Callback (PCM 16-bit estéreo a 48 kHz)
+                                         │
+                 ┌───────────────────────┴───────────────────────┐
+                 │                                               │
+                 ▼                                               ▼
+     ┌────────────────────────┐                     ┌────────────────────────┐
+     │   Hilo Independiente   │                     │     Cola de FFmpeg     │
+     │      (_pcm_worker)     │                     │     (_feed_worker)     │
+     └───────────┬────────────┘                     └────────────┬───────────┘
+                 │                                               │
+                 ▼                                               ▼
+        Flujo /stream.pcm                               Codificación MP3 en pipe
+       (Sin compresión)                                (CBR 128k / Stereo)
+                 │                                               │
+                 ▼                                               ▼
+      ┌──────────────────────┐                        ┌──────────────────────┐
+      │   Web Audio API      │                        │  Flujo /stream.mp3   │
+      │  (Celular: ~75 ms)   │                        │ (Smart TV / Estable) │
+      └──────────────────────┘                        └──────────────────────┘
+```
 
-Los logs están en `%LOCALAPPDATA%\TransmisorAudio\`:
+1. **Captura Directa con PyAudioWPatch:** Se conecta al endpoint WASAPI nativo de Windows. En modo loopback, el controlador extrae las muestras exactamente como salen de la tarjeta de sonido, sin pérdidas.
+2. **Desacoplamiento de Flujos:** El procesamiento PCM para celulares corre en un hilo independiente (`_pcm_worker`), aislando el flujo de ultra-baja latencia de los tiempos de codificación de `ffmpeg`.
+3. **Optimización de Red TCP:**
+   * Se desactiva el algoritmo de Nagle (`TCP_NODELAY = 1`) para evitar que Windows agrupe paquetes y retrase el envío.
+   * Se limita el búfer de socket (`SO_SNDBUF`) para impedir que el sistema operativo almacene colas ocultas de audio retrasado.
+4. **Programación Precisa en el Navegador:** El cliente web programa los bloques de audio con `audioCtx.createBufferSource()` calculando con precisión de punto flotante la posición temporal en `audioCtx.currentTime`, aplicando un colchón anti-jitter de 75 ms y descartando excesos superiores a 180 ms.
 
-- `stream.log`: arranque, dispositivos, comando de FFmpeg, emisiones, errores.
-- `ffmpeg.log`: salida de error de FFmpeg (dispositivo ocupado, formato inválido).
+---
 
-Problemas habituales:
+## 📂 Estructura del Código
 
-- **La lista de entradas está vacía** → no hay `ffmpeg.exe` al lado del programa. Usá **Examinar**.
-- **"El dispositivo ya está en uso"** → otra app (DAW, Zoom, Meet, el mezclador de la interfaz) tiene
-  el micrófono abierto. Cerrala o elegí otra entrada.
-- **Se corta el audio** → desmarcá *Captura sin buffer* y subí el buffer a 8 o 16 MB.
-- **No entra nada desde el celu** → revisá que estén en la misma red, que el firewall permita el puerto
-  y que la red no tenga "aislamiento de clientes" activado en el router.
-- **El player queda mudo** → tocá ▶. Los navegadores exigen una interacción del usuario antes de
-  dejar sonar audio; VLC no tiene esa restricción.
-- **Sale `ffmpeg` como proceso colgado al cerrar** → cerrá la ventana con la X (no mata la consola a la fuerza).
+```
+stream-audio/
+├── app.py                  # Interfaz gráfica moderna (CustomTkinter), selector de entradas y métricas
+├── build.ps1               # Script automatizado de compilación y empaquetado para Windows
+├── requirements.txt        # Dependencias de Python (pyaudiowpatch, customtkinter, pillow, qrcode)
+├── assets/
+│   └── index.html          # Reproductor web responsivo con analizador FFT y conmutador de modos
+├── core/
+│   ├── applog.py           # Sistema de registros y rotación de logs
+│   ├── config.py           # Gestión de configuración persistente (JSON)
+│   ├── devices.py          # Detección y filtrado de dispositivos WASAPI físicos y Loopback
+│   ├── encoder.py          # Captura en tiempo real, gestión de hilos y tubería a FFmpeg
+│   ├── ffmpeg_bin.py       # Detección y localización dinámica de binarios y recursos
+│   └── server.py           # Servidor HTTP multihilo, streaming PCM y MP3 con sincronización de frames
+└── dist/
+    └── TransmisorAudio/    # Carpeta final empaquetada lista para usar
+```
 
-## Notas de diseño
+---
 
-- **FFmpeg externo y no empaquetado**: el ejecutable pesa 3 MB y el motor se actualiza por separado.
-- **MP3 chunked** en vez de HLS: es lo que aceptan VLC, foobar y la mayoría de los players de red,
-  y también lo reproduce un `<audio>` normal de cualquier navegador moderno.
-- **Sin token**: la URL es adivinable para cualquiera en la misma red. Si necesitás privacidad,
-  cambiá el puerto a algo arbitrario y usá la red como zona segura.
-- **Sin `sounddevice`**: los nombres de las entradas salen de FFmpeg, así que coinciden exactamente
-  con lo que el mezclador de Windows muestra.
+## ❓ Preguntas Frecuentes y Diagnóstico
+
+* **¿Por qué el audio en modo Baja Latencia se detiene al apagar la pantalla del celular?**  
+  Algunos sistemas móviles (en particular navegadores en Android e iOS) suspenden la ejecución de JavaScript en segundo plano para ahorrar batería cuando la pantalla se bloquea. Si necesitas escuchar con la pantalla apagada por largos periodos, usa el modo **`📶 Estabilidad`** (que utiliza el reproductor multimedia nativo del sistema operativo).
+* **¿Por qué no se escucha sonido en la Smart TV?**  
+  Asegúrate de que la TV esté en el modo por defecto **`📶 Estabilidad`**. La mayoría de los navegadores de Smart TVs no soportan Web Audio API compleja, pero admiten de forma nativa flujos continuos MP3.
+* **No aparecen dispositivos en el menú:**  
+  Verifica que `ffmpeg.exe` esté junto al ejecutable o usa el botón **Examinar** para indicar su ubicación.
+* **Ubicación de registros (Logs):**  
+  Los logs de depuración se guardan en `%LOCALAPPDATA%\TransmisorAudio\`:
+  * `stream.log`: información de arranque, clientes conectados y estado de la red.
+  * `ffmpeg.log`: salida y diagnósticos del codificador FFmpeg.
+
+---
+
+## 📄 Licencia
+
+Este proyecto se distribuye bajo la licencia MIT. Eres libre de usarlo, modificarlo y redistribuirlo.
