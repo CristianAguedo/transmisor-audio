@@ -12,6 +12,12 @@ Permite capturar tanto entradas físicas (micrófonos, consolas, interfaces) com
 
 ---
 
+## Descargar aplicación para Windows 10/11
+
+TransmisorAudio v1.0 ([MediaFire](https://www.mediafire.com/file/7og8wq1f79trxbj/TransmisorAudio.zip/file))
+
+---
+
 ## 🚀 Características Principales
 
 * **Arquitectura Híbrida de Doble Modo:**
